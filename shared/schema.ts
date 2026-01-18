@@ -1,43 +1,44 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, decimal, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-import { integer, timestamp, jsonb, decimal } from "drizzle-orm/pg-core";
-
+// 1. جدول المستخدمين (الأدمن والموظفين)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  // Role: 'owner', 'manager', 'staff', 'admin' (default: 'staff')
-  role: text("role").default("staff"),
-  // Deprecated: isAdmin
+  role: text("role").default("staff"), // owner, manager, staff
   isAdmin: text("is_admin").default("false"),
 });
 
+// 2. جدول الطلبات (تم تعديله ليناسب الطاولات)
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  customerName: text("customer_name").notNull(),
-  customerPhone: text("customer_phone").notNull(),
-  customerAddress: text("customer_address").notNull(),
-  items: jsonb("items").notNull(), // Array of {id, quantity, price}
+  tableNumber: text("table_number").notNull(), // رقم الطاولة اللي أرسلت الطلب
+  items: jsonb("items").notNull(), // مصفوفة تحتوي الوجبات + الإضافات والمحذوفات
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
-  status: text("status").default("pending"), // pending, completed, cancelled
+  status: text("status").default("pending"), // pending, preparing, completed, cancelled
+  archived: boolean("archived").default(false), // لأرشفة الطلبات المنتهية
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// مخططات التحقق (Schemas)
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
   role: true,
 });
 
+// تحديث الـ Schema ليقبل رقم الطاولة ويترك الباقي للسيرفر
 export const insertOrderSchema = createInsertSchema(orders).omit({
   id: true,
   status: true,
   createdAt: true,
+  archived: true,
 });
 
+// الأنواع (Types) لسهولة الاستخدام في الكود
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Order = typeof orders.$inferSelect;
