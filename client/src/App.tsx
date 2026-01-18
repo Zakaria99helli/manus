@@ -6,6 +6,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Admin from "@/pages/Admin";
+// استيراد الصفحات الجديدة التي كانت ناقصة
+import MenuAdmin from "@/pages/MenuAdmin"; 
+import InventoryAdmin from "@/pages/InventoryAdmin";
 import { CartProvider } from "@/store/cart";
 
 function Router() {
@@ -13,6 +16,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/admin" component={Admin} />
+      {/* إضافة المسارات الجديدة هنا لكي يتعرف عليها المتصفح */}
+      <Route path="/MenuAdmin" component={MenuAdmin} />
+      <Route path="/InventoryAdmin" component={InventoryAdmin} />
       <Route component={NotFound} />
     </Switch>
   );
