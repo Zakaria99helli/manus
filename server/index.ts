@@ -93,11 +93,10 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // استخدم get-port للبحث عن بورت متاح تلقائياً بدون قيمة افتراضية
-  const port = await getPort();
-  app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+ // الحل الصحيح: الالتزام بمتغير البيئة PORT الذي تفرضه منصة الرفع
+  const port = Number(process.env.PORT) || 10000;
+  
+  app.listen(port, "0.0.0.0", () => {
+    log(`Server running on port ${port}`);
   });
 })();
-
-
