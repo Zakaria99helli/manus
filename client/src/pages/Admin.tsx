@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { UserForm, USER_PERMISSIONS } from '@/components/ui/user-form';
-import { RefreshCcw, LogOut, Bell, CheckCircle2 } from 'lucide-react';
+import { UserForm } from '@/components/ui/user-form';
+import { RefreshCcw, LogOut, Bell, CheckCircle2, Utensils, MinusCircle, PlusCircle } from 'lucide-react';
 import { useCart } from '@/store/cart';
 import { cn } from '@/lib/utils';
 
@@ -13,7 +13,8 @@ export default function Admin() {
     quantity: number;
     price: number;
     name: { en: string; fr: string; ar: string };
-    selectedExtras?: string[];
+    selectedExtras: string[];
+    selectedRemovals: string[];
   }
 
   interface Order {
@@ -40,46 +41,8 @@ export default function Admin() {
   const fetchUsers = async () => {
     try {
       const res = await fetch('/api/users');
-      if (res.ok) {
-        setUsers(await res.json());
-      }
-    } catch (error) {
-      console.error('Failed to fetch users:', error);
-    }
-  };
-
-  const handleUserSubmit = async (data: { username: string; password: string; role: string; permissions: string[] }) => {
-    try {
-      if (editUser) {
-        await fetch(`/api/users/${editUser.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-      } else {
-        await fetch('/api/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-      }
-      setShowUserForm(false);
-      setEditUser(null);
-      fetchUsers();
-    } catch (error) {
-      console.error('Failed to submit user:', error);
-    }
-  };
-
-  const handleDeleteUser = async (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف المستخدم؟')) {
-      try {
-        await fetch(`/api/users/${id}`, { method: 'DELETE' });
-        fetchUsers();
-      } catch (error) {
-        console.error('Failed to delete user:', error);
-      }
-    }
+      if (res.ok) setUsers(await res.json());
+    } catch (error) { console.error('Failed to fetch users:', error); }
   };
 
   const fetchOrders = async () => {
@@ -88,32 +51,25 @@ export default function Admin() {
       if (response.ok) {
         const data = await response.json();
         setOrders(data);
+        // تشغيل صوت التنبيه إذا زاد عدد الطلبات
+        if (data.length > prevOrdersCount.current) {
+          audioRef.current?.play().catch(e => console.log('Audio error:', e));
+        }
+        prevOrdersCount.current = data.length;
       }
       const archivedRes = await fetch('/api/orders/archived');
-      if (archivedRes.ok) {
-        const archivedData = await archivedRes.json();
-        setArchivedOrders(archivedData);
-      }
-    } catch (error) {
-      console.error('Failed to fetch orders:', error);
-    }
+      if (archivedRes.ok) setArchivedOrders(await archivedRes.json());
+    } catch (error) { console.error('Failed to fetch orders:', error); }
   };
 
   useEffect(() => {
     if (user) {
       fetchOrders();
-      const interval = setInterval(fetchOrders, 5000);
+      const interval = setInterval(fetchOrders, 5000); // تحديث تلقائي كل 5 ثواني
       if (user.role === 'owner' || user.role === 'manager') fetchUsers();
       return () => clearInterval(interval);
     }
   }, [user]);
-
-  useEffect(() => {
-    if (orders.length > prevOrdersCount.current) {
-      audioRef.current?.play().catch(e => console.log('Audio play failed:', e));
-    }
-    prevOrdersCount.current = orders.length;
-  }, [orders]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,9 +77,7 @@ export default function Admin() {
       await login(username, password);
       setUsername('');
       setPassword('');
-    } catch (error) {
-      console.error('Login failed:', error);
-    }
+    } catch (error) { console.error('Login failed'); }
   };
 
   const handleLogout = async () => {
@@ -132,194 +86,124 @@ export default function Admin() {
   };
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    try {
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (response.ok) {
-        fetchOrders();
-      }
-    } catch (error) {
-      console.error('Failed to update order status:', error);
-    }
+    await fetch(`/api/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    fetchOrders();
   };
 
   const archiveOrder = async (orderId: string) => {
-    try {
-      const response = await fetch(`/api/orders/${orderId}/archive`, {
-        method: 'POST',
-      });
-      if (response.ok) {
-        fetchOrders();
-      }
-    } catch (error) {
-      console.error('Failed to archive order:', error);
-    }
+    await fetch(`/api/orders/${orderId}/archive`, { method: 'POST' });
+    fetchOrders();
   };
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center p-4 font-poppins">
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Login</h1>
-          <p className="text-gray-600 mb-6">Damas Food Restaurant</p>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-cairo">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-black text-primary">Damas Food</h1>
+            <p className="text-gray-500">لوحة إدارة المطبخ والكاشير</p>
+          </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-              <Input
-                type="text"
-                placeholder="admin"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
-            <Button type="submit" className="w-full text-lg py-6 font-bold" disabled={isLoading}>
-              {isLoading ? 'Logging in...' : 'Login'}
+            <Input type="text" placeholder="اسم المستخدم" value={username} onChange={(e) => setUsername(e.target.value)} />
+            <Input type="password" placeholder="كلمة المرور" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Button type="submit" className="w-full py-6 text-lg font-bold" disabled={isLoading}>
+              {isLoading ? 'جاري الدخول...' : 'تسجيل الدخول'}
             </Button>
           </form>
-          <p className="text-xs text-gray-500 mt-6 text-center">Default credentials: admin / admin123</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={cn("min-h-screen bg-gray-100", language === 'ar' ? "font-cairo" : "font-poppins")} dir={language === 'ar' ? 'rtl' : 'ltr'}>
-      <audio ref={audioRef} src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae5c7.mp3" preload="auto" />
+    <div className={cn("min-h-screen bg-slate-50", language === 'ar' ? "font-cairo" : "font-poppins")} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
       
-      <div className="bg-white shadow-sm border-b p-4 flex flex-col md:flex-row justify-between items-center sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+      {/* Header */}
+      <div className="bg-white border-b sticky top-0 z-20 px-6 py-4 flex justify-between items-center shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary/10 p-2 rounded-lg"><Utensils className="text-primary w-6 h-6" /></div>
           <div>
-            <h1 className="text-xl font-bold text-gray-800">
-              {language === 'ar' ? 'نظام عرض المطبخ' : 'Kitchen Display System'}
-            </h1>
-            <p className="text-xs text-gray-500">
-              {language === 'ar' ? `مرحباً، ${user.username}` : `Welcome, ${user.username}`}
-            </p>
+            <h1 className="text-xl font-black text-slate-800">شاشة الطلبات الحية</h1>
+            <p className="text-xs text-green-600 font-bold">متصل الآن - تحديث مباشر</p>
           </div>
         </div>
-        <div className="flex gap-2 mt-4 md:mt-0">
-          <Button variant="outline" size="sm" onClick={fetchOrders}>
-            <RefreshCcw className="w-4 h-4 mr-2" /> {language === 'ar' ? 'تحديث' : 'Refresh'}
+        <div className="flex gap-3">
+          <Button variant="outline" size="sm" onClick={fetchOrders} className="font-bold">
+            <RefreshCcw className="w-4 h-4 ml-2" /> تحديث
           </Button>
-          <Button variant="destructive" size="sm" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 mr-2" /> {language === 'ar' ? 'خروج' : 'Logout'}
+          <Button variant="destructive" size="sm" onClick={handleLogout} className="font-bold">
+            <LogOut className="w-4 h-4 ml-2" /> خروج
           </Button>
         </div>
       </div>
 
-      <div className="p-6 max-w-7xl mx-auto">
-        {(user.role === 'owner' || user.role === 'manager') && (
-          <div className="mb-8 bg-white rounded-xl shadow-sm border p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">{language === 'ar' ? 'إدارة المستخدمين' : 'User Management'}</h2>
-              <Button onClick={() => { setShowUserForm(true); setEditUser(null); }}>
-                {language === 'ar' ? 'إضافة مستخدم' : 'Add User'}
-              </Button>
-            </div>
-            
-            {showUserForm && (
-              <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-                <UserForm
-                  onSubmit={handleUserSubmit}
-                  initial={editUser ? {
-                    username: editUser.username,
-                    password: '',
-                    role: editUser.role,
-                    permissions: editUser.permissions || [],
-                  } : undefined}
-                  submitLabel={editUser ? (language === 'ar' ? 'تعديل' : 'Update') : (language === 'ar' ? 'إضافة' : 'Add')}
-                />
-                <Button variant="ghost" className="mt-2" onClick={() => { setShowUserForm(false); setEditUser(null); }}>
-                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
-                </Button>
-              </div>
-            )}
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-right">
-                <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="p-3">{language === 'ar' ? 'اسم المستخدم' : 'Username'}</th>
-                    <th className="p-3">{language === 'ar' ? 'الدور' : 'Role'}</th>
-                    <th className="p-3">{language === 'ar' ? 'إجراءات' : 'Actions'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map(u => (
-                    <tr key={u.id} className="border-b hover:bg-gray-50">
-                      <td className="p-3 font-medium">{u.username}</td>
-                      <td className="p-3">{u.role}</td>
-                      <td className="p-3 flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => { setEditUser(u); setShowUserForm(true); }}>
-                          {language === 'ar' ? 'تعديل' : 'Edit'}
-                        </Button>
-                        {u.role !== 'owner' && (
-                          <Button size="sm" variant="destructive" onClick={() => handleDeleteUser(u.id)}>
-                            {language === 'ar' ? 'حذف' : 'Delete'}
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Bell className="text-primary" /> {language === 'ar' ? 'الطلبات النشطة' : 'Active Orders'}
+      <div className="p-6 max-w-full mx-auto">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          
+          {/* Active Orders Column */}
+          <div className="xl:col-span-2">
+            <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800">
+              <Bell className="text-orange-500 animate-bounce" /> الطلبات النشطة 
+              <span className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full">{orders.length}</span>
             </h2>
-            <div className="space-y-4">
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {orders.length === 0 ? (
-                <p className="text-gray-500 text-center py-8 bg-white rounded-xl border">{language === 'ar' ? 'لا توجد طلبات حالياً' : 'No active orders'}</p>
+                <div className="col-span-full bg-white border-2 border-dashed rounded-2xl py-20 text-center text-slate-400">
+                  <Utensils className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p className="text-xl">لا توجد طلبات جديدة حالياً</p>
+                </div>
               ) : (
                 orders.map(order => (
-                  <div key={order.id} className="bg-white rounded-xl shadow-sm border p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <span className="text-lg font-bold text-primary">#{order.tableNumber}</span>
-                        <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleTimeString()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        {order.status === 'pending' && (
-                          <Button size="sm" onClick={() => updateOrderStatus(order.id, 'completed')}>
-                            {language === 'ar' ? 'إكمال' : 'Complete'}
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline" onClick={() => archiveOrder(order.id)}>
-                          {language === 'ar' ? 'أرشفة' : 'Archive'}
-                        </Button>
-                      </div>
+                  <div key={order.id} className="bg-white rounded-2xl shadow-md border-2 border-slate-100 overflow-hidden hover:border-primary/50 transition-colors">
+                    <div className="bg-slate-800 p-4 text-white flex justify-between items-center">
+                      <span className="text-2xl font-black">طاولة {order.tableNumber}</span>
+                      <span className="text-xs opacity-70">{new Date(order.createdAt).toLocaleTimeString()}</span>
                     </div>
-                    <div className="space-y-1">
+                    
+                    <div className="p-4 space-y-4">
                       {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-sm">
-                          <span>{item.quantity}x {item.name[language as keyof typeof item.name]}</span>
-                          <span className="text-gray-500">€{(item.price * item.quantity).toFixed(2)}</span>
+                        <div key={idx} className="border-b border-slate-50 pb-3 last:border-0">
+                          <div className="flex justify-between items-start">
+                            <span className="text-lg font-bold text-slate-800">{item.quantity} × {item.name[language as keyof typeof item.name]}</span>
+                            <span className="font-bold text-primary">€{(item.price * item.quantity).toFixed(2)}</span>
+                          </div>
+                          
+                          {/* عرض الإضافات والمحذوفات بوضوح */}
+                          <div className="mt-1 space-y-1">
+                            {item.selectedRemovals?.map(r => (
+                              <div key={r} className="text-red-600 text-sm font-bold flex items-center gap-1">
+                                <MinusCircle className="w-3 h-3" /> بدون {r}
+                              </div>
+                            ))}
+                            {item.selectedExtras?.map(e => (
+                              <div key={e} className="text-green-600 text-sm font-bold flex items-center gap-1">
+                                <PlusCircle className="w-3 h-3" /> إكسترا {e}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
-                    <div className="mt-3 pt-3 border-t flex justify-between font-bold">
-                      <span>{language === 'ar' ? 'المجموع' : 'Total'}</span>
-                      <span>€{Number(order.total).toFixed(2)}</span>
+
+                    <div className="p-4 bg-slate-50 border-t flex flex-col gap-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-500">إجمالي الحساب:</span>
+                        <span className="text-2xl font-black text-slate-900">€{Number(order.total).toFixed(2)}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button className="font-bold bg-green-600 hover:bg-green-700" onClick={() => updateOrderStatus(order.id, 'completed')}>
+                          إكمال الطلب
+                        </Button>
+                        <Button variant="outline" className="font-bold border-slate-300" onClick={() => archiveOrder(order.id)}>
+                          أرشفة
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -327,24 +211,24 @@ export default function Admin() {
             </div>
           </div>
 
-          <div>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <CheckCircle2 className="text-green-500" /> {language === 'ar' ? 'الطلبات المؤرشفة' : 'Archived Orders'}
+          {/* Archived Column */}
+          <div className="bg-slate-200/50 rounded-3xl p-6 h-fit">
+            <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-600">
+              <CheckCircle2 className="text-slate-500" /> آخر الطلبات المنتهية
             </h2>
-            <div className="space-y-4 opacity-75">
-              {archivedOrders.map(order => (
-                <div key={order.id} className="bg-gray-50 rounded-xl border p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold">#{order.tableNumber}</span>
-                    <span className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</span>
+            <div className="space-y-3">
+              {archivedOrders.slice(0, 10).map(order => (
+                <div key={order.id} className="bg-white/80 rounded-xl p-3 border border-slate-200 flex justify-between items-center">
+                  <div>
+                    <span className="font-black text-slate-700">طاولة {order.tableNumber}</span>
+                    <p className="text-[10px] text-slate-400">{new Date(order.createdAt).toLocaleDateString()}</p>
                   </div>
-                  <div className="text-sm text-gray-600">
-                    {order.items.length} {language === 'ar' ? 'عناصر' : 'items'} - €{Number(order.total).toFixed(2)}
-                  </div>
+                  <span className="font-bold text-slate-600">€{Number(order.total).toFixed(2)}</span>
                 </div>
               ))}
             </div>
           </div>
+
         </div>
       </div>
     </div>
