@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { MenuItem, LocalizedString } from '@/data/menu';
+import { MenuItem } from '@/data/menu';
 import { pushOrderToFirebase } from '@/lib/firebase-orders';
 
 export interface CartItem extends MenuItem {
-  cartId: string; // Unique ID for this instance in cart
+  cartId: string; 
   quantity: number;
   selectedExtras: string[];
   selectedRemovals: string[];
@@ -27,10 +27,14 @@ interface CartContextType {
   language: 'en' | 'fr' | 'ar';
   setLanguage: (lang: 'en' | 'fr' | 'ar') => void;
   direction: 'ltr' | 'rtl';
-  // Order submission
-  submitOrder: (tableNumber: string) => Promise<any>;
+  // إضافات رقم الطاولة والسلة
+  tableNumber: string | null;
+  setTableNumber: (table: string) => void;
+  isCartOpen: boolean;
+  setIsCartOpen: (isOpen: boolean) => void;
+  // الطلبات والـ Auth
+  submitOrder: () => Promise<any>;
   isSubmitting: boolean;
-  // Auth
   user: User | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -41,7 +45,9 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [language, setLanguage] = useState<'en' | 'fr' | 'ar'>('fr');
+  const [language, setLanguage] = useState<'en' | 'fr' | 'ar'>('ar'); // افتراضي عربي
+  const [tableNumber, setTableNumber] = useState<string | null>(null);
+  const [isCartOpen, setIsCartOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,7 +59,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.lang = language;
   }, [direction, language]);
 
-  // Check if user is already logged in
+  // التحقق من الجلسة (Auth)
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -63,19 +69,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           setUser(userData);
         }
       } catch (error) {
-        console.error('Failed to check auth:', error);
+        console.error('Auth check failed');
       }
     };
     checkAuth();
   }, []);
 
-  const addToCart = (
-    item: MenuItem, 
-    quantity: number, 
-    extras: string[], 
-    removals: string[],
-    extraCost: number
-  ) => {
+  const addToCart = (item: MenuItem, quantity: number, extras: string[], removals: string[], extraCost: number) => {
     const newItem: CartItem = {
       ...item,
       cartId: Math.random().toString(36).substr(2, 9),
@@ -97,11 +97,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const newQuantity = item.quantity + delta;
         if (newQuantity < 1) return item;
         const unitPrice = item.totalPrice / item.quantity;
-        return {
-          ...item,
-          quantity: newQuantity,
-          totalPrice: unitPrice * newQuantity
-        };
+        return { ...item, quantity: newQuantity, totalPrice: unitPrice * newQuantity };
       }
       return item;
     }));
@@ -109,45 +105,41 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = () => setCart([]);
 
-  const submitOrder = async (tableNumber: string) => {
+  const submitOrder = async () => {
+    if (!tableNumber) throw new Error("رقم الطاولة مفقود");
+    
     setIsSubmitting(true);
     try {
-      const orderItems = cart.map(item => ({
-        productId: item.id,
-        quantity: item.quantity,
-        price: item.price,
-        name: item.name,
-        selectedExtras: item.selectedExtras,
-        selectedRemovals: item.selectedRemovals,
-      }));
       const orderPayload = {
         tableNumber,
-        items: orderItems,
+        items: cart.map(item => ({
+          productId: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          selectedExtras: item.selectedExtras,
+          selectedRemovals: item.selectedRemovals,
+          totalPrice: item.totalPrice
+        })),
         total: cartTotal,
-        createdAt: new Date().toISOString(),
       };
-      // Send to backend
+
       const response = await fetch('/api/orders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderPayload),
       });
-      if (!response.ok) {
-        throw new Error('Failed to submit order');
-      }
+
+      if (!response.ok) throw new Error('فشل إرسال الطلب');
+      
       const order = await response.json();
-      // Send to Firebase
+      
+      // إرسال لـ Firebase للتحديث اللحظي عند الكاشير
       try {
-        await pushOrderToFirebase({
-          ...orderPayload,
-          id: order.id,
-        });
+        await pushOrderToFirebase({ ...orderPayload, id: order.id });
       } catch (e) {
-        // Firebase failure should not block order
         console.error('Firebase push failed', e);
       }
+
       clearCart();
       return order;
     } finally {
@@ -160,16 +152,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await fetch('/api/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-
-      if (!response.ok) {
-        throw new Error('Login failed');
-      }
-
+      if (!response.ok) throw new Error('Login failed');
       const userData = await response.json();
       setUser(userData);
     } finally {
@@ -178,18 +164,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/logout', {
-        method: 'POST',
-      });
-
-      if (response.ok) {
-        setUser(null);
-      }
-    } finally {
-      setIsLoading(false);
-    }
+    await fetch('/api/logout', { method: 'POST' });
+    setUser(null);
   };
 
   const cartTotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
@@ -197,22 +173,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <CartContext.Provider value={{ 
-      cart, 
-      addToCart, 
-      removeFromCart, 
-      updateQuantity, 
-      clearCart, 
-      cartTotal, 
-      itemCount,
-      language,
-      setLanguage,
-      direction,
-      submitOrder,
-      isSubmitting,
-      user,
-      login,
-      logout,
-      isLoading,
+      cart, addToCart, removeFromCart, updateQuantity, clearCart, 
+      cartTotal, itemCount, language, setLanguage, direction,
+      tableNumber, setTableNumber, isCartOpen, setIsCartOpen,
+      submitOrder, isSubmitting, user, login, logout, isLoading,
     }}>
       {children}
     </CartContext.Provider>
@@ -221,8 +185,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
 export function useCart() {
   const context = useContext(CartContext);
-  if (context === undefined) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
+  if (context === undefined) throw new Error('useCart must be used within a CartProvider');
   return context;
 }
