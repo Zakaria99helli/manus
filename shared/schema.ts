@@ -1,105 +1,88 @@
+import { pgTable, varchar, text, timestamp, decimal, boolean, jsonb, integer, serial } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, decimal, boolean, integer } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
 
-// ---------------------
-// 1️⃣ جدول المستخدمين (الأدمن والموظفين)
-// ---------------------
+// Users table
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  role: text("role").default("staff"), // owner, manager, staff
-  isAdmin: boolean("is_admin").default(false),
+  id: serial("id").primaryKey(),
+  username: varchar("username", { length: 255 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
+  isAdmin: boolean("is_admin").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ---------------------
-// 2️⃣ جدول الأصناف (Menu Items) - يدعم الصور والإضافات
-// ---------------------
+// Menu Items table
 export const menuItems = pgTable("menu_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  category: text("category").notNull(), // سندويش / صحن / مشروب
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  available: boolean("available").default(true),
-  imageUrl: text("image_url").default(""), // رابط الصورة
-  createdAt: timestamp("created_at").defaultNow(),
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  nameAr: varchar("name_ar", { length: 255 }),
+  description: text("description"),
+  descriptionAr: text("description_ar"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull().default(sql`0`),
+  category: varchar("category", { length: 100 }).notNull(),
+  categoryAr: varchar("category_ar", { length: 100 }),
+  imageUrl: text("image_url"),
+  available: boolean("available").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ---------------------
-// 3️⃣ جدول خيارات الأصناف (إضافات/صوص/خضار)
-// ---------------------
+// Menu Options (Extras/Add-ons) table
 export const menuOptions = pgTable("menu_options", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  menuItemId: varchar("menu_item_id").notNull(),
-  name: text("name").notNull(),
-  extraPrice: decimal("extra_price", { precision: 10, scale: 2 }).default(sql`0`),
-  createdAt: timestamp("created_at").defaultNow(),
+  id: serial("id").primaryKey(),
+  menuItemId: integer("menu_item_id").notNull().references(() => menuItems.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  nameAr: varchar("name_ar", { length: 255 }),
+  extraPrice: decimal("extra_price", { precision: 10, scale: 2 }).default(sql`0`).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ---------------------
-// 4️⃣ جدول الطلبات
-// ---------------------
+// Tables table (restaurant tables with QR codes)
+export const tables = pgTable("tables", {
+  id: serial("id").primaryKey(),
+  tableNumber: varchar("table_number", { length: 50 }).notNull().unique(),
+  qrCode: text("qr_code").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Orders table
 export const orders = pgTable("orders", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tableNumber: text("table_number").notNull(), // رقم الطاولة
-  items: jsonb("items").notNull(), // مصفوفة تحتوي الوجبات + الإضافات والمحذوفات
-  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
-  status: text("status").default("pending"), // pending, preparing, completed, cancelled
-  archived: boolean("archived").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
+  id: serial("id").primaryKey(),
+  tableId: integer("table_id").notNull().references(() => tables.id),
+  items: jsonb("items").notNull(),
+  totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull().default(sql`0`),
+  status: varchar("status", { length: 50 }).default("pending").notNull(),
+  notes: text("notes"),
+  archived: boolean("archived").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// ---------------------
-// 5️⃣ TypeScript - structure واضحة للـ JSON
-// ---------------------
-export type OrderItem = {
-  menuItemId: string;
+// Types
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
+export type MenuItem = typeof menuItems.$inferSelect;
+export type InsertMenuItem = typeof menuItems.$inferInsert;
+
+export type MenuOption = typeof menuOptions.$inferSelect;
+export type InsertMenuOption = typeof menuOptions.$inferInsert;
+
+export type Table = typeof tables.$inferSelect;
+export type InsertTable = typeof tables.$inferInsert;
+
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = typeof orders.$inferInsert;
+
+// Order item structure for JSON
+export interface OrderItem {
+  menuItemId: number;
+  name: string;
   quantity: number;
-  options?: string[]; // أسماء الخيارات المختارة
-  removes?: string[]; // أسماء الأشياء المحذوفة
-};
+  price: number;
+  options?: {
+    id: number;
+    name: string;
+    extraPrice: number;
+  }[];
+}
 
 export type OrderJSON = OrderItem[];
-
-// ---------------------
-// 6️⃣ Schemas للتحقق
-// ---------------------
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  role: true,
-});
-
-export const insertMenuItemSchema = createInsertSchema(menuItems).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertMenuOptionSchema = createInsertSchema(menuOptions).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertOrderSchema = createInsertSchema(orders).omit({
-  id: true,
-  status: true,
-  createdAt: true,
-  archived: true,
-});
-
-// ---------------------
-// 7️⃣ Types للـ TS
-// ---------------------
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
-
-export type InsertMenuItem = z.infer<typeof insertMenuItemSchema>;
-export type MenuItem = typeof menuItems.$inferSelect;
-
-export type InsertMenuOption = z.infer<typeof insertMenuOptionSchema>;
-export type MenuOption = typeof menuOptions.$inferSelect;
-
-export type InsertOrder = z.infer<typeof insertOrderSchema>;
-export type Order = typeof orders.$inferSelect;
