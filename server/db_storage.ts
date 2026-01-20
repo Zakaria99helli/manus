@@ -34,7 +34,7 @@ export class DatabaseStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values({
       ...insertUser,
-      isAdmin: "false",
+      isAdmin: false, // ⬅️ غيّرت من "false" لـ false
     }).returning();
     return user;
   }
@@ -80,8 +80,6 @@ export class DatabaseStorage {
   }
 
   async archiveOrder(id: string): Promise<Order | undefined> {
-    // For simplicity in this permanent version, we just mark as archived or completed
-    // Or we could add an 'archived' column to the orders table
     const [updatedOrder] = await db
       .update(orders)
       .set({ status: "archived" })
