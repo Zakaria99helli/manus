@@ -5,14 +5,17 @@ import {
   users,
   orders,
   menuItems,
+  menuOptions,
   type User,
   type InsertUser,
   type Order,
   type InsertOrder,
   type MenuItem,
   type InsertMenuItem,
-} from "../shared/schema"; // تم إصلاح المسار هنا
-import { eq, and } from "drizzle-orm";
+  type MenuOption,
+  type InsertMenuOption,
+} from "../shared/schema"; // تم تعديل المسار هنا فقط من @shared إلى ../shared
+import { eq } from "drizzle-orm";
 
 const router = express.Router();
 
@@ -20,64 +23,154 @@ const router = express.Router();
 // --- Users CRUD ---
 // ---------------------
 
-router.get("/users", async (_req: Request, res: Response) => {
+// Get all users
+router.get("/users", async (req: Request, res: Response) => {
   const allUsers = await db.select().from(users);
   res.json(allUsers);
 });
 
-router.post("/users", async (req: Request, res: Response) => {
-  const [user] = await db.insert(users).values(req.body).returning();
+// Get user by ID
+router.get("/users/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const [user] = await db.select().from(users).where(eq(users.id, id));
+  if (!user) return res.status(404).json({ error: "User not found" });
   res.json(user);
 });
 
+// Create user
+router.post("/users", async (req: Request, res: Response) => {
+  const userData: InsertUser = req.body;
+  const [user] = await db.insert(users).values(userData).returning();
+  res.json(user);
+});
+
+// Update user
 router.patch("/users/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const [user] = await db.update(users).set(req.body).where(eq(users.id, id)).returning();
+  const updateData = req.body;
+  const [user] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+  if (!user) return res.status(404).json({ error: "User not found" });
   res.json(user);
 });
 
+// Delete user
 router.delete("/users/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  await db.delete(users).where(eq(users.id, id));
+  const [user] = await db.delete(users).where(eq(users.id, id)).returning();
+  if (!user) return res.status(404).json({ error: "User not found" });
   res.json({ message: "User deleted" });
 });
 
 // ---------------------
-// --- Menu Items ---
+// --- Menu Items CRUD ---
 // ---------------------
 
-router.get("/menu-items", async (_req: Request, res: Response) => {
+// Get all menu items
+router.get("/menu-items", async (req: Request, res: Response) => {
   const items = await db.select().from(menuItems);
   res.json(items);
+});
+
+// Get menu item by ID
+router.get("/menu-items/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const [item] = await db.select().from(menuItems).where(eq(menuItems.id, parseInt(id)));
+  if (!item) return res.status(404).json({ error: "Menu item not found" });
+  res.json(item);
+});
+
+// Create menu item
+router.post("/menu-items", async (req: Request, res: Response) => {
+  const itemData: InsertMenuItem = req.body;
+  const [item] = await db.insert(menuItems).values(itemData).returning();
+  res.json(item);
+});
+
+// Update menu item
+router.put("/menu-items/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updateData = req.body;
+  const [item] = await db.update(menuItems).set(updateData).where(eq(menuItems.id, parseInt(id))).returning();
+  if (!item) return res.status(404).json({ error: "Menu item not found" });
+  res.json(item);
+});
+
+// Delete menu item
+router.delete("/menu-items/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const [item] = await db.delete(menuItems).where(eq(menuItems.id, parseInt(id))).returning();
+  if (!item) return res.status(404).json({ error: "Menu item not found" });
+  res.json({ message: "Menu item deleted" });
+});
+
+// ---------------------
+// --- Menu Options CRUD ---
+// ---------------------
+
+// Get all options for a menu item
+router.get("/menu-items/:menuItemId/options", async (req: Request, res: Response) => {
+  const { menuItemId } = req.params;
+  const options = await db.select().from(menuOptions).where(eq(menuOptions.menuItemId, parseInt(menuItemId)));
+  res.json(options);
+});
+
+// Create option for a menu item
+router.post("/menu-items/:menuItemId/options", async (req: Request, res: Response) => {
+  const { menuItemId } = req.params;
+  const optionData: Omit<InsertMenuOption, 'menuItemId'> = req.body;
+  const [option] = await db.insert(menuOptions).values({ ...optionData, menuItemId: parseInt(menuItemId) }).returning();
+  res.json(option);
+});
+
+// Update option
+router.put("/menu-options/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updateData = req.body;
+  const [option] = await db.update(menuOptions).set(updateData).where(eq(menuOptions.id, parseInt(id))).returning();
+  if (!option) return res.status(404).json({ error: "Menu option not found" });
+  res.json(option);
+});
+
+// Delete option
+router.delete("/menu-options/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const [option] = await db.delete(menuOptions).where(eq(menuOptions.id, parseInt(id))).returning();
+  if (!option) return res.status(404).json({ error: "Menu option not found" });
+  res.json({ message: "Menu option deleted" });
 });
 
 // ---------------------
 // --- Orders CRUD ---
 // ---------------------
 
-// جلب الطلبات النشطة (غير المؤرشفة)
-router.get("/orders", async (_req: Request, res: Response) => {
-  const allOrders = await db.select()
-    .from(orders)
-    .where(eq(orders.archived, false));
-  res.json(allOrders);
+// Get all active orders
+router.get("/orders", async (req: Request, res: Response) => {
+  const activeOrders = await db.select().from(orders).where(eq(orders.archived, false));
+  res.json(activeOrders);
 });
 
-// جلب الطلبات المؤرشفة
-router.get("/orders/archived", async (_req: Request, res: Response) => {
-  const archived = await db.select()
-    .from(orders)
-    .where(eq(orders.archived, true));
-  res.json(archived);
+// Get archived orders
+router.get("/orders/archived", async (req: Request, res: Response) => {
+  const archivedOrders = await db.select().from(orders).where(eq(orders.archived, true));
+  res.json(archivedOrders);
 });
 
-// إنشاء طلب جديد (متوافق مع نظام الطاولات)
+// Get order by ID
+router.get("/orders/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const [order] = await db.select().from(orders).where(eq(orders.id, id));
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  res.json(order);
+});
+
+// Create order (تعديل طفيف ليدعم tableNumber بدلاً من العنوان)
 router.post("/orders", async (req: Request, res: Response) => {
   try {
     const orderData: InsertOrder = {
-      tableNumber: req.body.tableNumber,
-      items: req.body.items,
+      ...req.body,
       total: req.body.total.toString(),
+      status: "pending",
+      archived: false
     };
     const [order] = await db.insert(orders).values(orderData).returning();
     res.json(order);
@@ -86,54 +179,37 @@ router.post("/orders", async (req: Request, res: Response) => {
   }
 });
 
-// تحديث حالة الطلب (قيد التحضير، مكتمل...)
+// Update order status
 router.patch("/orders/:id/status", async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status } = req.body;
-  const [order] = await db.update(orders)
-    .set({ status })
-    .where(eq(orders.id, id))
-    .returning();
+  const [order] = await db.update(orders).set({ status }).where(eq(orders.id, id)).returning();
+  if (!order) return res.status(404).json({ error: "Order not found" });
   res.json(order);
 });
 
-// أرشفة الطلب (تم تغييرها لـ POST لتطابق كود الـ Admin)
+// Archive order (تغيير POST ليتوافق مع استدعاء صفحة Admin)
 router.post("/orders/:id/archive", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const [order] = await db.update(orders)
-    .set({ archived: true })
-    .where(eq(orders.id, id))
-    .returning();
+  const [order] = await db.update(orders).set({ archived: true }).where(eq(orders.id, id)).returning();
+  if (!order) return res.status(404).json({ error: "Order not found" });
   res.json(order);
 });
 
-// ---------------------
 // --- Auth Routes ---
-// ---------------------
-
 router.post("/login", async (req: Request, res: Response) => {
   const { username, password } = req.body;
   const [user] = await db.select().from(users).where(eq(users.username, username));
-  
-  if (!user || user.password !== password) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
-  
-  // لغايات التجربة سنعيد بيانات المستخدم، في الإنتاج يجب استخدام JWT/Session
+  if (!user || user.password !== password) return res.status(401).json({ error: "Invalid credentials" });
   res.json(user);
 });
 
-router.get("/user", async (_req: Request, res: Response) => {
-  // هذا الـ endpoint لغايات فحص تسجيل الدخول
-  res.status(401).json({ message: "Not authenticated" });
-});
-
-router.post("/logout", (_req, res) => {
+router.post("/logout", (req, res) => {
   res.json({ message: "Logged out" });
 });
 
 // ---------------------
-// --- Register ---
+// --- Register Routes Function ---
 // ---------------------
 export default function registerRoutes(app: Express) {
   app.use("/api", router);
