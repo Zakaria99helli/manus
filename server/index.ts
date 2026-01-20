@@ -1,5 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import registerRoutes from "./routes"; // ⬅️ غيّرت من { registerRoutes } لـ registerRoutes
 import { serveStatic } from "./static";
 import { storage } from "./storage";
 import session from "express-session";
@@ -16,7 +16,7 @@ declare module "http" {
 
 app.use(
   express.json({
-    verify: (req, _res, buf) => {
+    verify: (req, _res, buf ) => {
       req.rawBody = buf;
     },
   }),
@@ -75,7 +75,7 @@ app.use((req, res, next) => {
     })
   );
 
-  const httpServer = await registerRoutes(app);
+  const httpServer = await registerRoutes(app );
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -90,7 +90,7 @@ app.use((req, res, next) => {
   } else {
     // في التطوير: استخدم Vite كـ middleware لكل الطلبات غير API
     const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
+    await setupVite(httpServer, app );
   }
 
  // الحل الصحيح: الالتزام بمتغير البيئة PORT الذي تفرضه منصة الرفع
