@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, decimal, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, decimal, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -34,7 +34,7 @@ export const menuOptions = pgTable("menu_options", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   menuItemId: varchar("menu_item_id").notNull(),
   name: text("name").notNull(),
-  extraPrice: decimal("extra_price", { precision: 10, scale: 2 }).default(0),
+  extraPrice: decimal("extra_price", { precision: 10, scale: 2 }).default(sql`0`),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
