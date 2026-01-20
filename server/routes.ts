@@ -1,4 +1,5 @@
-import express, { Request, Response } from "express";
+import express, { type Request, type Response, type Express } from "express";
+import { createServer } from "http";
 import { db } from "./db";
 import {
   users,
@@ -18,7 +19,7 @@ import {
 } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
 
-const router = express.Router();
+const router = express.Router( );
 
 // ---------------------
 // --- Users CRUD ---
@@ -48,7 +49,7 @@ router.post("/users", async (req: Request, res: Response) => {
 // Update user
 router.put("/users/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const updateData: Partial<User> = req.body;
+  const updateData = req.body;
   const [user] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
   if (!user) return res.status(404).json({ error: "User not found" });
   res.json(user);
@@ -57,8 +58,9 @@ router.put("/users/:id", async (req: Request, res: Response) => {
 // Delete user
 router.delete("/users/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  await db.delete(users).where(eq(users.id, id));
-  res.json({ success: true });
+  const [user] = await db.delete(users).where(eq(users.id, id)).returning();
+  if (!user) return res.status(404).json({ error: "User not found" });
+  res.json({ message: "User deleted" });
 });
 
 // ---------------------
@@ -66,9 +68,17 @@ router.delete("/users/:id", async (req: Request, res: Response) => {
 // ---------------------
 
 // Get all menu items
-router.get("/menu-items", async (_req: Request, res: Response) => {
+router.get("/menu-items", async (req: Request, res: Response) => {
   const items = await db.select().from(menuItems);
   res.json(items);
+});
+
+// Get menu item by ID
+router.get("/menu-items/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const [item] = await db.select().from(menuItems).where(eq(menuItems.id, id));
+  if (!item) return res.status(404).json({ error: "Menu item not found" });
+  res.json(item);
 });
 
 // Create menu item
@@ -81,7 +91,7 @@ router.post("/menu-items", async (req: Request, res: Response) => {
 // Update menu item
 router.put("/menu-items/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const updateData: Partial<MenuItem> = req.body;
+  const updateData = req.body;
   const [item] = await db.update(menuItems).set(updateData).where(eq(menuItems.id, id)).returning();
   if (!item) return res.status(404).json({ error: "Menu item not found" });
   res.json(item);
@@ -90,79 +100,80 @@ router.put("/menu-items/:id", async (req: Request, res: Response) => {
 // Delete menu item
 router.delete("/menu-items/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  await db.delete(menuItems).where(eq(menuItems.id, id));
-  res.json({ success: true });
+  const [item] = await db.delete(menuItems).where(eq(menuItems.id, id)).returning();
+  if (!item) return res.status(404).json({ error: "Menu item not found" });
+  res.json({ message: "Menu item deleted" });
 });
 
 // ---------------------
 // --- Menu Options CRUD ---
 // ---------------------
 
-// Get options for a menu item
-router.get("/menu-items/:id/options", async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const options = await db.select().from(menuOptions).where(eq(menuOptions.menuItemId, id));
+// Get all options for a menu item
+router.get("/menu-items/:menuItemId/options", async (req: Request, res: Response) => {
+  const { menuItemId } = req.params;
+  const options = await db.select().from(menuOptions).where(eq(menuOptions.menuItemId, menuItemId));
   res.json(options);
 });
 
-// Create menu option
-router.post("/menu-items/:id/options", async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const optionData: InsertMenuOption = { ...req.body, menuItemId: id };
-  const [option] = await db.insert(menuOptions).values(optionData).returning();
+// Create option for a menu item
+router.post("/menu-items/:menuItemId/options", async (req: Request, res: Response) => {
+  const { menuItemId } = req.params;
+  const optionData: Omit<InsertMenuOption, 'menuItemId'> = req.body;
+  const [option] = await db.insert(menuOptions).values({ ...optionData, menuItemId }).returning();
   res.json(option);
 });
 
-// Update menu option
-router.put("/options/:id", async (req: Request, res: Response) => {
+// Update option
+router.put("/menu-options/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const updateData: Partial<MenuOption> = req.body;
+  const updateData = req.body;
   const [option] = await db.update(menuOptions).set(updateData).where(eq(menuOptions.id, id)).returning();
-  if (!option) return res.status(404).json({ error: "Option not found" });
+  if (!option) return res.status(404).json({ error: "Menu option not found" });
   res.json(option);
 });
 
-// Delete menu option
-router.delete("/options/:id", async (req: Request, res: Response) => {
+// Delete option
+router.delete("/menu-options/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  await db.delete(menuOptions).where(eq(menuOptions.id, id));
-  res.json({ success: true });
+  const [option] = await db.delete(menuOptions).where(eq(menuOptions.id, id)).returning();
+  if (!option) return res.status(404).json({ error: "Menu option not found" });
+  res.json({ message: "Menu option deleted" });
 });
 
 // ---------------------
 // --- Orders CRUD ---
 // ---------------------
 
-// Get all active orders
-router.get("/orders", async (_req: Request, res: Response) => {
-  const activeOrders = await db.select().from(orders).where(eq(orders.archived, false));
-  res.json(activeOrders);
+// Get all orders
+router.get("/orders", async (req: Request, res: Response) => {
+  const allOrders = await db.select().from(orders).where(eq(orders.archived, false));
+  res.json(allOrders);
 });
 
-// Get all archived orders
-router.get("/orders/archived", async (_req: Request, res: Response) => {
+// Get archived orders
+router.get("/orders/archived", async (req: Request, res: Response) => {
   const archivedOrders = await db.select().from(orders).where(eq(orders.archived, true));
   res.json(archivedOrders);
+});
+
+// Get order by ID
+router.get("/orders/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const [order] = await db.select().from(orders).where(eq(orders.id, id));
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  res.json(order);
 });
 
 // Create order
 router.post("/orders", async (req: Request, res: Response) => {
   const orderData: InsertOrder = req.body;
-
-  // Optionally: validate OrderJSON
-  const items: OrderJSON = orderData.items as OrderJSON;
-  const menuItemIds = items.map(i => i.menuItemId);
-  const existingItems = await db.select().from(menuItems).where(inArray(menuItems.id, menuItemIds));
-  if (existingItems.length !== menuItemIds.length) {
-    return res.status(400).json({ error: "One or more menu items not found" });
-  }
-
   const [order] = await db.insert(orders).values(orderData).returning();
   res.json(order);
 });
 
 // Update order status
-router.put("/orders/:id/status", async (req: Request, res: Response) => {
+router.patch("/orders/:id/status", async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status } = req.body;
   const [order] = await db.update(orders).set({ status }).where(eq(orders.id, id)).returning();
@@ -178,4 +189,12 @@ router.put("/orders/:id/archive", async (req: Request, res: Response) => {
   res.json(order);
 });
 
-export default router;
+// ---------------------
+// --- Register Routes Function ---
+// ---------------------
+export default function registerRoutes(app: Express) {
+  app.use("/api", router);
+  
+  const httpServer = createServer(app );
+  return httpServer;
+}
